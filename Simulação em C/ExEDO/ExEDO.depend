@@ -1,0 +1,5 @@
+# depslib dependency file v1.0
+1594843177 source:c:\users\maria\desktop\exedo\main.cpp
+	<iostream>
+	<math.h>
+

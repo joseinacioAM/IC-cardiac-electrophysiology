@@ -1,0 +1,19 @@
+# depslib dependency file v1.0
+1595445558 source:c:\users\maria\desktop\mlb(oficial)\main.cpp
+	<stdio.h>
+	<stdlib.h>
+	<locale.h>
+	<time.h>
+	<math.h>
+	<fstream>
+	<iostream>
+
+1595445558 source:c:\users\maria\desktop\ic\códigos\mlb(oficial)\main.cpp
+	<stdio.h>
+	<stdlib.h>
+	<locale.h>
+	<time.h>
+	<math.h>
+	<fstream>
+	<iostream>
+

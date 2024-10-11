@@ -1,0 +1,382 @@
+<html>
+<head>
+<!-- Including Abubu.js Library -->
+<script src='https://abubujs.org/libs/Abubu.latest.js'></script>
+</head>
+
+<!-- Main body of html page ............................................-->
+<body>
+    <!-- Drawing Canvas to Visualize Results -->
+    <canvas id="canvas_1" width=512 height=512
+            style="border:1px solid #000000;" >
+    </canvas>
+</body>
+
+<!-- Initial condition shader ----------------------------------------- -->
+<script id='icshader' type='x-shader-fragment'>#version 300 es
+precision highp float ;
+precision highp int ;
+
+	float w0 = (2.0/6.0);
+	float w = (1.0/6.0);
+	
+layout ( location = 0 ) out vec4 outTrgt1 ; // output @ location 1
+layout ( location = 1 ) out vec4 outN_S_L_O ;
+
+
+in vec2 cc ;    // center of pixel location
+void main(){
+    vec4 outTrgt =vec4(0.) ; // Setting all channels to zero
+    vec4 NSLO =vec4(0.) ;
+	
+	outTrgt.b = 1.;
+	
+    outTrgt1   = outTrgt ;
+	outN_S_L_O = NSLO    ;
+    return ;
+}
+</script>
+
+
+<!-- Time Step Shader ------------------------------------------------- -->
+<script id='tsshader' type='x-shader-fragment'>#version 300 es
+precision highp float ;     /* high precision float     */
+precision highp int ;       /* high precision integers  */
+
+
+	uniform sampler2D   inf0; 
+	uniform sampler2D   inN_S_L_O;   /* input textures            */
+
+
+
+
+/* .......................................................................
+   using macros for parameters. consider changing them by uniforms 
+   and updating them through the graphical user interface as an excercise
+   .......................................................................
+*/
+#define diffCoef    0.001   /* diffusion coefficient    */
+#define lx          10.0     /* length of the domain     */
+#define D           2.
+#define dt          0.1
+
+#define alpha       0.0003
+
+
+layout (location = 0 ) out vec4 outTrgt    ;
+layout (location = 1 ) out vec4 outN_S_L_O ;
+
+
+in vec2 cc ;    // Center coordinate of the pixel : between 0-1.
+
+/*-------------------------------------------------------------------------
+ * main body of the shader
+ *-------------------------------------------------------------------------
+ */
+void main() {
+
+    // reading the texture size and calculating delta_x (dx) .............
+    vec2    size = vec2(textureSize( inf0,0 )) ;
+    float   dx   = 0.02; //lx/size.x ; /* delta x: spacial increment */
+
+    // unit vectors ......................................................
+    vec2 ii =  vec2(1.,0.)/size ; // unit vector in x
+    vec2 jj =  vec2(0.,1.)/size ; // unit vector in y
+
+    // calculating laplacian using the  central difference scheme ........
+	float inv_omega   = (dt*D*alpha/(dx*dx) + 0.5);
+	float tau = dt*inv_omega;
+	float omega = 1./inv_omega;
+	//pesos 
+	float w0 = (2.0/6.0);
+	float w = (1.0/6.0);
+	//colisão	
+	vec4 V_fo  = texture( inf0, cc) ;
+	vec4 Direc  = texture( inN_S_L_O, cc) ;
+	
+	
+	
+	float total = V_fo.r;
+	float f0    = V_fo.g;
+	float h_1   = V_fo.b;
+	float t     = V_fo.a;
+	
+	float f1    = Direc.r;
+	float f2    = Direc.g;
+	float f3    = Direc.b;
+	float f4    = Direc.a;
+
+	
+	float atual = f0 + f1 + f2 + f3 + f4 ;
+
+	float eq0 = atual * w0;
+	float eq1 = atual * w;
+	float eq2 = atual * w;
+	float eq3 = atual * w;
+	float eq4 = atual * w;
+	
+	
+	/*Insira as EDOs AQUI*/
+	float Tin = 0.3, Tout=6.0;
+    float ti= 0.1, ti2 = 380.;
+    float tf= 1.1, tf2 = 383.;
+    float Istim;
+
+    if((t >=ti)&&(t<=tf)&& (cc.x<0.1)||(t >=ti2)&&(t<=tf2)&& (cc.y<0.1)) 
+        Istim = 0.1;
+    else
+        Istim= 0.;
+
+    float C = atual*atual*(1.-atual);
+    float Iin = h_1 * C /Tin;
+    float Iout = -atual/Tout;
+	
+	float dvdt =  Iin + Iout + Istim;
+	float dhdt;
+	
+	float Topen=120.0, Tclose = 150.0, Vgate = 0.13;
+	
+	if(atual < Vgate)
+		dhdt = (1.-h_1)/Topen;
+	else
+		dhdt = -h_1/Tclose;
+	
+	
+	float aux0 = ( f0 * (1.-omega)) + omega * eq0 + w0 * dt * dvdt;
+	float aux1 = ( f1 * (1.-omega)) + omega * eq1 + w  * dt * dvdt;
+	float aux2 = ( f2 * (1.-omega)) + omega * eq2 + w  * dt * dvdt;
+	float aux3 = ( f3 * (1.-omega)) + omega * eq3 + w  * dt * dvdt;
+	float aux4 = ( f4 * (1.-omega)) + omega * eq4 + w  * dt * dvdt;
+	
+	h_1 = h_1 + dt * dhdt;
+	t += dt;	
+	atual = aux0 + aux1 + aux2 + aux3 + aux4;
+   
+   outTrgt =vec4( atual, aux0, h_1, t);
+   outN_S_L_O = vec4(aux1, aux2, aux3, aux4);
+ 
+ 
+   
+    return ;
+}
+</script>
+
+	
+<script id='somashader' type='x-shader-fragment'>#version 300 es
+
+precision highp float ;     /* high precision float     */
+precision highp int ;       /* high precision integers  */
+
+	uniform sampler2D   inf0; 
+	uniform sampler2D   inN_S_L_O; /* input textures            */
+
+	
+	layout (location = 0 ) out vec4 outTrgt ;
+	layout (location = 1 ) out vec4 outN_S_L_O ;     // output color of the shader
+	
+
+
+
+	in vec2 cc ;    // Center coordinate of the pixel : between 0-1.
+	
+	void main(){
+	
+	// reading the texture size and calculating delta_x (dx) .............
+    vec2  size = vec2(textureSize( inf0,0 )) ;
+
+    // unit vectors ......................................................
+    vec2 ii = vec2(1.,0.)/size ; // unit vector in x
+    vec2 jj = vec2(0.,1.)/size ; // unit vector in y
+	
+	
+	vec4 V_fo  = texture( inf0, cc     ) ;
+	vec4 Direc = texture( inN_S_L_O, cc) ;
+	
+	float total = V_fo.r  ;
+	float f0    = V_fo.g  ;
+	float h_1   = V_fo.b  ;
+	float t     = V_fo.a  ;
+	float f1    = Direc.r ;
+	float f2    = Direc.g ;
+	float f3    = Direc.b ;
+	float f4    = Direc.a ;
+	
+	
+	float aux0 = f0;
+	float aux1 = f1;
+	float aux2 = f2;   
+	float aux3 = f3;
+	float aux4 = f4;
+
+	if( cc.x < 1. &&
+		cc.x > 0. &&				/*quando estiver fora da borda*/
+		cc.y < 1. &&   
+		cc.y > 0. 	 ) {
+		
+		 aux1  = texture( inN_S_L_O, cc-ii ).r ;
+		 aux2  = texture( inN_S_L_O, cc-jj ).g ;
+		 aux3  = texture( inN_S_L_O, cc+ii ).b ;
+		 aux4  = texture( inN_S_L_O, cc+jj ).a ;
+		 
+	}else if( cc.x == 1. ){
+		 aux1 = f3;   //especular o "bounce back"
+		
+		 aux2 = texture( inN_S_L_O, cc-jj ).g ;
+		 aux3 = texture( inN_S_L_O, cc+ii ).b ; /*propagação normal*/
+		 aux4 = texture( inN_S_L_O, cc+jj ).a ;
+		 
+	}else if( cc.x == 0. ){
+		 aux3  = f1 ;
+		 
+		 aux1  = texture( inN_S_L_O, cc-ii ).r ;
+		 aux2  = texture( inN_S_L_O, cc-jj ).g ;
+		 aux4  = texture( inN_S_L_O, cc+jj ).a ;
+		 
+	}else if( cc.y == 1. ){
+		 aux2  = f4;
+		 
+		 aux1  = texture( inN_S_L_O, cc-ii ).r ;
+		 aux3  = texture( inN_S_L_O, cc+ii ).b ;
+		 aux4  = texture( inN_S_L_O, cc+jj ).a ;
+	}else if( cc.x == 0. ){
+		 aux4  = f2 ;
+		 
+		 aux1  = texture( inN_S_L_O, cc-ii ).r ;
+		 aux2  = texture( inN_S_L_O, cc-jj ).g ;
+		 aux3  = texture( inN_S_L_O, cc+ii ).b ;
+	}
+	
+	
+	
+	
+	float atual = aux0 + aux1 + aux2 + aux3 + aux4;
+		
+	outTrgt    = vec4(atual, aux0, h_1, t);
+	outN_S_L_O = vec4(aux1, aux2, aux3, aux4);
+
+	return;
+	}
+	
+</script>
+
+
+<script>
+// get the shader source by its id ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+console.time("Tempo de Simulação");
+function source(id){
+    return document.getElementById(id).text ;
+}
+
+// Get the canvas ........................................................
+var canvas_1 = document.getElementById('canvas_1') ;
+
+// defining a textures for time stepping .................................
+
+var txt1 = new Abubu.Float32Texture(512,512) ;
+var txt2 = new Abubu.Float32Texture(512,512) ;
+
+
+var N_S_L_O    = new Abubu.Float32Texture(512,512) ;
+var auxN_S_L_O = new Abubu.Float32Texture(512,512) ;
+
+
+// variables for interactions through GUI ................................
+env = {
+    skip : 100 ,
+    running : true ,
+    solve : function(){ env.running = !env.running ; } ,	
+} ;
+
+// init solver ...........................................................
+var icSolver = new Abubu.Solver({
+    fragmentShader : source ('icshader') ,
+    targets : {
+        outTrgt1      : { location : 0 , target : txt1    } ,
+		outN_S_L_O    : { location : 1 , target : N_S_L_O } ,
+		
+    }
+} ) ;
+env.init = function(){ icSolver.render() } ;
+env.init() ;
+
+// Setup time-step solvers  (colisão)-----------------------------------------------
+
+// Colisão : gets F0, F1, F2, F3, F4 --> writes F0aux, F1aux, F2aux, F3aux, F4aux  ............................
+var tsSolver1 = new Abubu.Solver( {
+    fragmentShader : source('tsshader') ,
+    uniforms : {
+        inf0     : { type : 't', value : txt1   } ,
+		inN_S_L_O: { type : 't', value : N_S_L_O} ,
+    },
+    targets : {
+		outTrgt    : { location :0, target : txt2        } ,
+		outN_S_L_O : { location :1, target : auxN_S_L_O  } ,	
+    }
+} ) ;
+
+// colisão  : gets F0aux, F1aux, F2aux, F3aux, F4aux --> writes F0, F1, F2, F3, F4 , txt1 ...........................
+var tsSolver2 = new Abubu.Solver( {
+    fragmentShader : source('somashader') ,
+    uniforms : {
+        inf0      : { type : 't', value : txt2        } ,
+		inN_S_L_O : { type : 't', value : auxN_S_L_O  } ,
+    },
+    targets : {
+        outTrgt    : { location :0, target : txt1     } ,
+		outN_S_L_O : { location :1, target : N_S_L_O  } ,
+    } 
+} ) ;
+
+// visualization solver --------------------------------------------------
+var plt = new Abubu.Plot2D({
+    target : txt1,
+    channel: 'r',
+    minValue : 0.,
+    maxValue : 1.0,
+    colorbar : true ,
+    canvas : canvas_1
+} ) ;
+plt.init() ;
+
+var tempSim = 0.0;
+// run and visualize the program -----------------------------------------
+
+function run(){
+	if(tempSim >= 1000.){ // atualmente = 10 000 interações;  se quiser colocar mais é só mudar esse numero dentro do if
+		env.running = false;
+		console.timeEnd("Tempo de Simulação");
+		return ;
+	}
+    if (env.running){
+	
+        for(var i=0; i < env.skip ; i++){
+            tsSolver1.render() ;
+            tsSolver2.render() ;
+			tempSim+= 0.1;
+        }
+	 
+    }
+    plt.render() ;
+	
+    requestAnimationFrame(run) ;
+}
+
+// create the user interface ---------------------------------------------
+function createGUI(){
+    var gui = new Abubu.Gui() ;
+    var pnl = gui.addPanel() ;
+
+    pnl.add( env, 'skip').step(1).min(1) ;
+    pnl.add( env, 'init').name( 'Initialize Solution' ) ;
+    pnl.add( env, 'solve').name('Solve/Pause') ;
+}
+   
+// execute createGUI .....................................................
+createGUI();
+
+// execute run ...........................................................
+
+run();
+
+</script>
+</html>
